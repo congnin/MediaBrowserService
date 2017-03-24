@@ -48,6 +48,30 @@ public class MusicService extends MediaBrowserService implements Playback.Callba
     private Playback mPlayback;
     private PackageValidator mPackageValidator;
 
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        LogHelper.d(TAG, "onCreate");
+
+        mPlayingQueue = new ArrayList<>();
+        mMusicProvider = new MusicProvider();
+        mPackageValidator = new PackageValidator(this);
+
+        mSession = new MediaSession(this, "MusicService");
+        setSessionToken(mSession.getSessionToken());
+        mSession.setCallback();
+        mSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS |
+                MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
+
+        mPlayback = new Playback(this, mMusicProvider);
+        mPlayback.setState(PlaybackState.STATE_NONE);
+        mPlayback.setCallback(this);
+        mPlayback.start();
+
+        Context context = getApplicationContext();
+        Intent intent = new Intent(context, MusicPlayerActivity.class);
+        PendingIntent
+    }
 
     private static class DelayedStopHandler extends Handler {
         private final WeakReference<MusicService> mWeakReference;

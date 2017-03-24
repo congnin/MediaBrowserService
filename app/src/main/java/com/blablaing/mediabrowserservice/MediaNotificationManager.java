@@ -6,12 +6,17 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.media.MediaDescription;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 
 import com.blablaing.mediabrowserservice.utils.LogHelper;
 import com.blablaing.mediabrowserservice.utils.ResourceHelper;
@@ -79,6 +84,54 @@ public class MediaNotificationManager extends BroadcastReceiver {
             mPlaybackState = mController.getPlaybackState();
 
             Notification notification = createNotification();
+            if (notification != null) {
+                mController.registerCallback(mCb);
+                IntentFilter filter = new IntentFilter();
+                filter.addAction(ACTION_NEXT);
+                filter.addAction(ACTION_PAUSE);
+                filter.addAction(ACTION_PLAY);
+                filter.addAction(ACTION_PREV);
+                mService.registerReceiver(this, filter);
+
+                mService.startForeground(NOTIFICATION_ID, notification);
+                mStarted = true;
+            }
+        }
+    }
+
+    public void stopNotification() {
+        if (mStarted) {
+            mStarted = false;
+            mController.unregisterCallback(mCb);
+            try {
+                mNotificationManager.cancel(NOTIFICATION_ID);
+                mService.unregisterReceiver(this);
+            } catch (IllegalArgumentException e) {
+
+            }
+            mService.stopForeground(true);
+        }
+    }
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        final String action = intent.getAction();
+        LogHelper.d(TAG, "Received intent with action " + action);
+        switch (action) {
+            case ACTION_PAUSE:
+                mTransportControls.pause();
+                break;
+            case ACTION_PLAY:
+                mTransportControls.play();
+                break;
+            case ACTION_NEXT:
+                mTransportControls.skipToNext();
+                break;
+            case ACTION_PREV:
+                mTransportControls.skipToPrevious();
+                break;
+            default:
+                LogHelper.w(TAG, "Unknown intent ignored. Action=", action);
         }
     }
 
@@ -88,15 +141,55 @@ public class MediaNotificationManager extends BroadcastReceiver {
             if (mController != null) {
                 mController.unregisterCallback(mCb);
             }
+            mSessionToken = freshToken;
+            mController = new MediaController(mService, mSessionToken);
+            mTransportControls = mController.getTransportControls();
+            if (mStarted) {
+                mController.registerCallback(mCb);
+            }
         }
     }
 
-    public void stopNotification() {
-        if (mStarted) {
-            mStarted = false;
-            mController.unregisterCallback(mCb);
-        }
+    private PendingIntent createContentIntent() {
+        Intent openUI = new Intent(mService, MusicPlayerActivity.class);
+        openUI.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return PendingIntent.getActivity(mService, REQUEST_CODE, openUI,
+                PendingIntent.FLAG_CANCEL_CURRENT);
     }
+
+    private final MediaController.Callback mCb = new MediaController.Callback() {
+        @Override
+        public void onPlaybackStateChanged(@NonNull PlaybackState state) {
+            mPlaybackState = state;
+            LogHelper.d(TAG, "Received new playback state", state);
+            if (state != null && (state.getState() == PlaybackState.STATE_STOPPED ||
+                    state.getState() == PlaybackState.STATE_NONE)) {
+                stopNotification();
+            } else {
+                Notification notification = createNotification();
+                if (notification != null) {
+                    mNotificationManager.notify(NOTIFICATION_ID, notification);
+                }
+            }
+        }
+
+        @Override
+        public void onMetadataChanged(@Nullable MediaMetadata metadata) {
+            mMetadata = metadata;
+            LogHelper.d(TAG, "Received new metadata ", metadata);
+            Notification notification = createNotification();
+            if (notification != null) {
+                mNotificationManager.notify(NOTIFICATION_ID, notification);
+            }
+        }
+
+        @Override
+        public void onSessionDestroyed() {
+            super.onSessionDestroyed();
+            LogHelper.d(TAG, "Session was destroyed, resetting to the new session token");
+            updateSessionToken();
+        }
+    };
 
     private Notification createNotification() {
         LogHelper.d(TAG, "updateNotificationMetadata. mMetadata=" + mMetadata);
@@ -113,7 +206,46 @@ public class MediaNotificationManager extends BroadcastReceiver {
             playPauseButtonPosition = 1;
         }
 
-        addPlay
+        addPlayPauseAction(notificationBuilder);
+        if ((mPlaybackState.getActions() & PlaybackState.ACTION_SKIP_TO_NEXT) != 0) {
+            notificationBuilder.addAction(R.drawable.ic_skip_next_white_24dp,
+                    mService.getString(R.string.label_next), mNextIntent);
+        }
+
+        MediaDescription description = mMetadata.getDescription();
+
+        String fetchArtUrl = null;
+        Bitmap art = null;
+        if (description.getIconUri() != null) {
+            String artUrl = description.getIconUri().toString();
+            art = AlbumArtCache.getInstance().getBigImage(artUrl);
+            if (art == null) {
+                fetchArtUrl = artUrl;
+                art = BitmapFactory.decodeResource(mService.getResources(),
+                        R.drawable.ic_default_art);
+            }
+        }
+
+        notificationBuilder
+                .setStyle(new Notification.MediaStyle()
+                        .setShowActionsInCompactView(
+                                new int[]{playPauseButtonPosition})
+                        .setMediaSession(mSessionToken))
+                .setColor(mNotificationColor)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setUsesChronometer(true)
+                .setContentIntent(createContentIntent())
+                .setContentTitle(description.getTitle())
+                .setContentText(description.getSubtitle())
+                .setLargeIcon(art);
+
+        setNotificationPlaybackState(notificationBuilder);
+        if (fetchArtUrl != null) {
+            fetchBitmapFromURLAsync(fetchArtUrl, notificationBuilder);
+        }
+
+        return notificationBuilder.build();
     }
 
     private void addPlayPauseAction(Notification.Builder builder) {
@@ -133,28 +265,43 @@ public class MediaNotificationManager extends BroadcastReceiver {
         builder.addAction(new Notification.Action(icon, label, intent));
     }
 
-    private void setNotificationPlaybackState(Notification.Builder builder){
+    private void setNotificationPlaybackState(Notification.Builder builder) {
         LogHelper.d(TAG, "updateNotificationPlaybackState. mPlaybackState=" + mPlaybackState);
-        if(mPlaybackState == null || !mStarted){
+        if (mPlaybackState == null || !mStarted) {
             LogHelper.d(TAG, "updateNotificationPlaybackState. cancelling notification!");
-            mService
+            mService.stopForeground(true);
+            return;
         }
+        if (mPlaybackState.getState() == PlaybackState.STATE_PLAYING
+                && mPlaybackState.getPosition() >= 0) {
+            LogHelper.d(TAG, "updateNotificationPlaybackState. updating playback position to ",
+                    (System.currentTimeMillis() - mPlaybackState.getPosition()) / 1000, " seconds");
+            builder
+                    .setWhen(System.currentTimeMillis() - mPlaybackState.getPosition())
+                    .setShowWhen(true)
+                    .setUsesChronometer(true);
+        } else {
+            LogHelper.d(TAG, "updateNotificationPlaybackState. hiding playback position");
+            builder
+                    .setWhen(0)
+                    .setShowWhen(false)
+                    .setUsesChronometer(false);
+        }
+        builder.setOngoing(mPlaybackState.getState() == PlaybackState.STATE_PLAYING);
     }
 
-    private final MediaController.Callback mCb = new MediaController.Callback() {
-        @Override
-        public void onPlaybackStateChanged(@NonNull PlaybackState state) {
-            mPlaybackState = state;
-            LogHelper.d(TAG, "Received new playback state", state);
-            if (state != null && (state.getState() == PlaybackState.STATE_STOPPED ||
-                    state.getState() == PlaybackState.STATE_NONE)) {
-                stop
+    private void fetchBitmapFromURLAsync(final String bitmapUrl,
+                                         final Notification.Builder builder) {
+        AlbumArtCache.getInstance().fetch(bitmapUrl, new AlbumArtCache.FetchListener() {
+            @Override
+            public void onFetched(String artUrl, Bitmap bitmap, Bitmap icon) {
+                if (mMetadata != null && mMetadata.getDescription() != null &&
+                        artUrl.equals(mMetadata.getDescription().getIconUri().toString())) {
+                    LogHelper.d(TAG, "fetchBitmapFromURLAsync: set bitmap to ", artUrl);
+                    builder.setLargeIcon(bitmap);
+                    mNotificationManager.notify(NOTIFICATION_ID, builder.build());
+                }
             }
-        }
-    }
-
-    @Override
-    public void onReceive(Context context, Intent intent) {
-
+        });
     }
 }
