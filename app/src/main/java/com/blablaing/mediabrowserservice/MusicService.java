@@ -70,7 +70,8 @@ public class MusicService extends MediaBrowserService implements Playback.Callba
 
         Context context = getApplicationContext();
         Intent intent = new Intent(context, MusicPlayerActivity.class);
-        PendingIntent
+        PendingIntent pi = PendingIntent.getActivity(context, 99,
+                intent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     private static class DelayedStopHandler extends Handler {
