@@ -68,6 +68,11 @@ public class MusicProvider {
         mFavoriteTracks = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     }
 
+    /**
+     * Get an iterator over the list of genres
+     *
+     * @return genres
+     */
     public Iterable<String> getGenres() {
         if (mCurrentState != State.INITIALIZED) {
             return Collections.emptyList();

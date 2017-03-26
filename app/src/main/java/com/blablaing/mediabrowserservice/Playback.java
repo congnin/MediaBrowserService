@@ -7,10 +7,10 @@ import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.MediaPlayer;
+import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.net.wifi.WifiManager;
 import android.os.PowerManager;
-import android.support.v4.media.session.MediaSessionCompat;
 import android.text.TextUtils;
 
 import com.blablaing.mediabrowserservice.model.MusicProvider;
@@ -121,7 +121,7 @@ public class Playback implements AudioManager.OnAudioFocusChangeListener,
         return mMediaPlayer != null ? mMediaPlayer.getCurrentPosition() : mCurrentPosition;
     }
 
-    public void play(MediaSessionCompat.QueueItem item) {
+    public void play(MediaSession.QueueItem item) {
         mPlayOnFocusGain = true;
         tryToGetAudioFocus();
         registerAudioNoisyReceiver();

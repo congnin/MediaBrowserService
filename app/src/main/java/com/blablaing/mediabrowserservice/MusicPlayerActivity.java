@@ -8,7 +8,7 @@ public class MusicPlayerActivity extends AppCompatActivity
         implements BrowseFragment.FragmentDataHelper {
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_music_player);
         if (savedInstanceState == null) {
@@ -20,6 +20,18 @@ public class MusicPlayerActivity extends AppCompatActivity
 
     @Override
     public void onMediaItemSelected(MediaBrowser.MediaItem item) {
-
+        if (item.isPlayable()) {
+            getMediaController().getTransportControls().playFromMediaId(item.getMediaId(), null);
+            QueueFragment queueFragment = QueueFragment.newInstance();
+            getFragmentManager().beginTransaction()
+                    .replace(R.id.container, queueFragment)
+                    .addToBackStack(null)
+                    .commit();
+        } else if (item.isBrowsable()) {
+            getFragmentManager().beginTransaction()
+                    .replace(R.id.container, BrowseFragment.newInstance(item.getMediaId()))
+                    .addToBackStack(null)
+                    .commit();
+        }
     }
 }
