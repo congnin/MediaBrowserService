@@ -44,7 +44,7 @@ import static com.blablaing.mediabrowserservice.utils.MediaIDHelper.createBrowse
 public class MusicService extends MediaBrowserService implements Playback.Callback {
     // The action of the incoming Intent indicating that it contains a command
     // to be executed (see {@link #onStartCommand})
-    public static final String ACTION_CMD = "com.example.android.mediabrowserservice.ACTION_CMD";
+    public static final String ACTION_CMD = "com.blablaing.mediabrowserservice.ACTION_CMD";
     // The key in the extras of the incoming Intent indicating the command that
     // should be executed (see {@link #onStartCommand})
     public static final String CMD_NAME = "CMD_NAME";
@@ -55,7 +55,7 @@ public class MusicService extends MediaBrowserService implements Playback.Callba
     private static final String TAG = LogHelper.makeLogTag(MusicService.class);
     // Action to thumbs up a media item
     private static final String CUSTOM_ACTION_THUMBS_UP =
-            "com.example.android.mediabrowserservice.THUMBS_UP";
+            "com.blablaing.mediabrowserservice.THUMBS_UP";
     // Delay stopSelf by using a handler.
     private static final int STOP_DELAY = 30000;
 
