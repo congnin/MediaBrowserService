@@ -11,6 +11,7 @@ import android.support.v4.media.session.PlaybackStateCompat;
 import android.widget.Toast;
 
 import com.blablaing.mediabrowserservice.MusicService;
+import com.blablaing.mediabrowserservice.R;
 import com.blablaing.mediabrowserservice.utils.LogHelper;
 
 /**
@@ -21,6 +22,7 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
     private static final String TAG = LogHelper.makeLogTag(BaseActivity.class);
 
     private MediaBrowserCompat mMediaBrowser;
+    private PlaybackControlsFragment mControlsFragment;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -33,6 +35,13 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
     @Override
     protected void onStart() {
         super.onStart();
+
+        mControlsFragment = (PlaybackControlsFragment) getFragmentManager()
+                .findFragmentById(R.id.fragment_playback_controls);
+        if (mControlsFragment == null) {
+            throw new IllegalStateException("Missing fragment with id 'controls. Cannot continue.");
+        }
+
         hidePlaybackControls();
         mMediaBrowser.connect();
     }
