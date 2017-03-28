@@ -219,7 +219,7 @@ public class MusicService extends MediaBrowserServiceCompat implements PlaybackM
                             .setMediaId(MEDIA_ID_MUSICS_BY_GENRE)
                             .setTitle(getString(R.string.browse_genres))
                             .setIconUri(Uri.parse("android.resource://" +
-                                    "com.example.android.mediabrowserservice/drawable/ic_by_genre"))
+                                    "com.blablaing.mediabrowserservice/drawable/ic_by_genre"))
                             .setSubtitle(getString(R.string.browse_genre_subtitle))
                             .build(), MediaBrowserCompat.MediaItem.FLAG_BROWSABLE
             ));

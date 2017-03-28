@@ -68,14 +68,6 @@ public class MediaBrowseFragment extends Fragment {
     private final MediaControllerCompat.Callback mMediaControllerCallback =
             new MediaControllerCompat.Callback() {
                 @Override
-                public void onPlaybackStateChanged(PlaybackStateCompat state) {
-                    super.onPlaybackStateChanged(state);
-                    LogHelper.d(TAG, "Received state change: ", state);
-                    checkForUserVisibleErrors(false);
-                    mBrowserAdapter.notifyDataSetChanged();
-                }
-
-                @Override
                 public void onMetadataChanged(MediaMetadataCompat metadata) {
                     super.onMetadataChanged(metadata);
                     if (metadata == null) {
@@ -83,6 +75,14 @@ public class MediaBrowseFragment extends Fragment {
                     }
                     LogHelper.d(TAG, "Received metadata change to media ",
                             metadata.getDescription().getMediaId());
+                    mBrowserAdapter.notifyDataSetChanged();
+                }
+
+                @Override
+                public void onPlaybackStateChanged(PlaybackStateCompat state) {
+                    super.onPlaybackStateChanged(state);
+                    LogHelper.d(TAG, "Received state change: ", state);
+                    checkForUserVisibleErrors(false);
                     mBrowserAdapter.notifyDataSetChanged();
                 }
             };

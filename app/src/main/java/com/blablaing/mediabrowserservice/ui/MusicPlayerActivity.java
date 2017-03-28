@@ -1,20 +1,12 @@
 package com.blablaing.mediabrowserservice.ui;
 
 import android.app.FragmentTransaction;
-import android.content.ComponentName;
 import android.content.Intent;
-import android.media.browse.MediaBrowser;
-import android.os.RemoteException;
 import android.provider.MediaStore;
 import android.support.v4.media.MediaBrowserCompat;
-import android.support.v4.media.session.MediaControllerCompat;
-import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.text.TextUtils;
 
-import com.blablaing.mediabrowserservice.MusicService;
-import com.blablaing.mediabrowserservice.QueueFragment;
 import com.blablaing.mediabrowserservice.R;
 import com.blablaing.mediabrowserservice.utils.LogHelper;
 
@@ -119,5 +111,10 @@ public class MusicPlayerActivity extends BaseActivity
     @Override
     public void setToolbarTitle(CharSequence title) {
 
+    }
+
+    @Override
+    protected void onMediaControllerConnected() {
+        getBrowseFragment().onConnected();
     }
 }

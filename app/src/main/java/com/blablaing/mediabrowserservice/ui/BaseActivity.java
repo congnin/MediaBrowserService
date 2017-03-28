@@ -8,6 +8,7 @@ import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaControllerCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+import android.widget.Toast;
 
 import com.blablaing.mediabrowserservice.MusicService;
 import com.blablaing.mediabrowserservice.utils.LogHelper;
@@ -22,7 +23,7 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
     private MediaBrowserCompat mMediaBrowser;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         mMediaBrowser = new MediaBrowserCompat(this,
@@ -32,6 +33,7 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
     @Override
     protected void onStart() {
         super.onStart();
+        hidePlaybackControls();
         mMediaBrowser.connect();
     }
 
@@ -44,6 +46,10 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
     @Override
     public MediaBrowserCompat getMediaBrowser() {
         return mMediaBrowser;
+    }
+
+    protected void onMediaControllerConnected() {
+
     }
 
     protected void showPlaybackControls() {
@@ -64,13 +70,12 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
         setSupportMediaController(mediaController);
         mediaController.registerCallback(mMediaControllerCallback);
 
-        if(shouldShowControls()){
+        if (shouldShowControls()) {
             showPlaybackControls();
-        }else{
+        } else {
             hidePlaybackControls();
         }
-
-
+        onMediaControllerConnected();
     }
 
     private final MediaControllerCompat.Callback mMediaControllerCallback =
