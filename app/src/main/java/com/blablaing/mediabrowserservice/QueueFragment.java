@@ -119,18 +119,6 @@ public class QueueFragment extends Fragment {
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_list, container, false);
 
-        mSkipPrevious = (ImageButton) rootView.findViewById(R.id.skip_previous);
-        mSkipPrevious.setEnabled(false);
-        mSkipPrevious.setOnClickListener(mButtonListener);
-
-        mSkipNext = (ImageButton) rootView.findViewById(R.id.skip_next);
-        mSkipNext.setEnabled(false);
-        mSkipNext.setOnClickListener(mButtonListener);
-
-        mPlayPause = (ImageButton) rootView.findViewById(R.id.play_pause);
-        mPlayPause.setEnabled(true);
-        mPlayPause.setOnClickListener(mButtonListener);
-
         mQueueAdapter = new QueueAdapter(getActivity());
 
         ListView mListView = (ListView) rootView.findViewById(R.id.list_view);
@@ -233,23 +221,6 @@ public class QueueFragment extends Fragment {
             final int state = mPlaybackState == null ?
                     PlaybackState.STATE_NONE : mPlaybackState.getState();
             switch (v.getId()) {
-                case R.id.play_pause:
-                    LogHelper.d(TAG, "Play button pressed, in state " + state);
-                    if (state == PlaybackState.STATE_PAUSED ||
-                            state == PlaybackState.STATE_STOPPED ||
-                            state == PlaybackState.STATE_NONE) {
-                        playMedia();
-                    } else if (state == PlaybackState.STATE_PLAYING) {
-                        pauseMedia();
-                    }
-                    break;
-                case R.id.skip_previous:
-                    LogHelper.d(TAG, "Start button pressed, in state " + state);
-                    skipToPrevious();
-                    break;
-                case R.id.skip_next:
-                    skipToNext();
-                    break;
             }
         }
     };

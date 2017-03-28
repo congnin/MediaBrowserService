@@ -1,5 +1,11 @@
 package com.blablaing.mediabrowserservice.utils;
 
+import android.content.Context;
+import android.support.v4.app.FragmentActivity;
+import android.support.v4.media.MediaBrowserCompat;
+import android.support.v4.media.session.MediaControllerCompat;
+import android.text.TextUtils;
+
 import java.util.Arrays;
 
 /**
@@ -72,5 +78,22 @@ public class MediaIDHelper {
         }
         String[] parentHierarchy = Arrays.copyOf(hierarchy, hierarchy.length - 1);
         return createMediaID(null, parentHierarchy);
+    }
+
+    public static boolean isMediaItemPlaying(Context context,
+                                             MediaBrowserCompat.MediaItem mediaItem) {
+        MediaControllerCompat controller = ((FragmentActivity) context)
+                .getSupportMediaController();
+        if (controller != null && controller.getMetadata() != null) {
+            String currentPlayingMediaId = controller.getMetadata().getDescription()
+                    .getMediaId();
+            String itemMusicId = MediaIDHelper.extractMusicIDFromMediaID(
+                    mediaItem.getDescription().getMediaId());
+            if (currentPlayingMediaId != null
+                    && TextUtils.equals(currentPlayingMediaId, itemMusicId)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

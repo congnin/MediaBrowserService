@@ -1,7 +1,6 @@
 package com.blablaing.mediabrowserservice;
 
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -10,16 +9,22 @@ import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.media.MediaDescription;
-import android.media.MediaMetadata;
-import android.media.session.MediaController;
-import android.media.session.MediaSession;
-import android.media.session.PlaybackState;
+import android.os.RemoteException;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import android.support.v4.app.NotificationManagerCompat;
+import android.support.v4.media.MediaDescriptionCompat;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaControllerCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
+import android.support.v7.app.NotificationCompat;
 
+import com.blablaing.mediabrowserservice.ui.MusicPlayerActivity;
+import com.blablaing.mediabrowserservice.utils.AlbumArtCache;
 import com.blablaing.mediabrowserservice.utils.LogHelper;
 import com.blablaing.mediabrowserservice.utils.ResourceHelper;
+
+import static com.google.android.gms.cast.framework.media.MediaIntentReceiver.ACTION_STOP_CASTING;
 
 /**
  * Created by Linh on 3/24/2017.
@@ -37,33 +42,34 @@ public class MediaNotificationManager extends BroadcastReceiver {
     public static final String ACTION_NEXT = "com.blablaing.mediabrowserservice.next";
 
     private final MusicService mService;
-    private MediaSession.Token mSessionToken;
-    private MediaController mController;
-    private MediaController.TransportControls mTransportControls;
+    private MediaSessionCompat.Token mSessionToken;
+    private MediaControllerCompat mController;
+    private MediaControllerCompat.TransportControls mTransportControls;
 
-    private PlaybackState mPlaybackState;
-    private MediaMetadata mMetadata;
+    private PlaybackStateCompat mPlaybackState;
+    private MediaMetadataCompat mMetadata;
 
-    private NotificationManager mNotificationManager;
+    private final NotificationManagerCompat mNotificationManager;
 
-    private PendingIntent mPauseIntent;
-    private PendingIntent mPlayIntent;
-    private PendingIntent mPreviousIntent;
-    private PendingIntent mNextIntent;
+    private final PendingIntent mPauseIntent;
+    private final PendingIntent mPlayIntent;
+    private final PendingIntent mPreviousIntent;
+    private final PendingIntent mNextIntent;
+
+    private final PendingIntent mStopCastIntent;
 
     private int mNotificationColor;
 
     private boolean mStarted = false;
 
-    public MediaNotificationManager(MusicService service) {
+    public MediaNotificationManager(MusicService service) throws RemoteException {
         mService = service;
         updateSessionToken();
 
         mNotificationColor = ResourceHelper.getThemeColor(mService,
                 android.R.attr.colorPrimary, Color.DKGRAY);
 
-        mNotificationManager = (NotificationManager) mService
-                .getSystemService(Context.NOTIFICATION_SERVICE);
+        mNotificationManager = NotificationManagerCompat.from(service);
 
         String pkg = mService.getPackageName();
         mPauseIntent = PendingIntent.getBroadcast(mService, REQUEST_CODE,
@@ -74,7 +80,9 @@ public class MediaNotificationManager extends BroadcastReceiver {
                 new Intent(ACTION_PREV).setPackage(pkg), PendingIntent.FLAG_CANCEL_CURRENT);
         mNextIntent = PendingIntent.getBroadcast(mService, REQUEST_CODE,
                 new Intent(ACTION_NEXT).setPackage(pkg), PendingIntent.FLAG_CANCEL_CURRENT);
-
+        mStopCastIntent = PendingIntent.getBroadcast(mService, REQUEST_CODE,
+                new Intent(ACTION_STOP_CASTING).setPackage(pkg),
+                PendingIntent.FLAG_CANCEL_CURRENT);
         mNotificationManager.cancelAll();
     }
 
@@ -91,6 +99,7 @@ public class MediaNotificationManager extends BroadcastReceiver {
                 filter.addAction(ACTION_PAUSE);
                 filter.addAction(ACTION_PLAY);
                 filter.addAction(ACTION_PREV);
+                filter.addAction(ACTION_STOP_CASTING);
                 mService.registerReceiver(this, filter);
 
                 mService.startForeground(NOTIFICATION_ID, notification);
@@ -130,19 +139,26 @@ public class MediaNotificationManager extends BroadcastReceiver {
             case ACTION_PREV:
                 mTransportControls.skipToPrevious();
                 break;
+            case ACTION_STOP_CASTING:
+                Intent i = new Intent(context, MusicService.class);
+                i.setAction(MusicService.ACTION_CMD);
+                i.putExtra(MusicService.CMD_NAME, MusicService.CMD_STOP_CASTING);
+                mService.startService(i);
+                break;
             default:
                 LogHelper.w(TAG, "Unknown intent ignored. Action=", action);
         }
     }
 
-    private void updateSessionToken() {
-        MediaSession.Token freshToken = mService.getSessionToken();
-        if (mSessionToken == null || !mSessionToken.equals(freshToken)) {
+    private void updateSessionToken() throws RemoteException {
+        MediaSessionCompat.Token freshToken = mService.getSessionToken();
+        if (mSessionToken == null && freshToken != null ||
+                mSessionToken != null && !mSessionToken.equals(freshToken)) {
             if (mController != null) {
                 mController.unregisterCallback(mCb);
             }
             mSessionToken = freshToken;
-            mController = new MediaController(mService, mSessionToken);
+            mController = new MediaControllerCompat(mService, mSessionToken);
             mTransportControls = mController.getTransportControls();
             if (mStarted) {
                 mController.registerCallback(mCb);
@@ -150,20 +166,24 @@ public class MediaNotificationManager extends BroadcastReceiver {
         }
     }
 
-    private PendingIntent createContentIntent() {
+    private PendingIntent createContentIntent(MediaDescriptionCompat description) {
         Intent openUI = new Intent(mService, MusicPlayerActivity.class);
         openUI.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        openUI.putExtra(MusicPlayerActivity.EXTRA_START_FULLSCREEN, true);
+        if (description != null) {
+            openUI.putExtra(MusicPlayerActivity.EXTRA_CURRENT_MEDIA_DESCRIPTION, description);
+        }
         return PendingIntent.getActivity(mService, REQUEST_CODE, openUI,
                 PendingIntent.FLAG_CANCEL_CURRENT);
     }
 
-    private final MediaController.Callback mCb = new MediaController.Callback() {
+    private final MediaControllerCompat.Callback mCb = new MediaControllerCompat.Callback() {
         @Override
-        public void onPlaybackStateChanged(@NonNull PlaybackState state) {
+        public void onPlaybackStateChanged(@NonNull PlaybackStateCompat state) {
             mPlaybackState = state;
             LogHelper.d(TAG, "Received new playback state", state);
-            if (state != null && (state.getState() == PlaybackState.STATE_STOPPED ||
-                    state.getState() == PlaybackState.STATE_NONE)) {
+            if (state.getState() == PlaybackStateCompat.STATE_STOPPED ||
+                    state.getState() == PlaybackStateCompat.STATE_NONE) {
                 stopNotification();
             } else {
                 Notification notification = createNotification();
@@ -174,7 +194,7 @@ public class MediaNotificationManager extends BroadcastReceiver {
         }
 
         @Override
-        public void onMetadataChanged(@Nullable MediaMetadata metadata) {
+        public void onMetadataChanged(MediaMetadataCompat metadata) {
             mMetadata = metadata;
             LogHelper.d(TAG, "Received new metadata ", metadata);
             Notification notification = createNotification();
@@ -187,7 +207,12 @@ public class MediaNotificationManager extends BroadcastReceiver {
         public void onSessionDestroyed() {
             super.onSessionDestroyed();
             LogHelper.d(TAG, "Session was destroyed, resetting to the new session token");
-            updateSessionToken();
+            try {
+                updateSessionToken();
+            } catch (RemoteException e) {
+                LogHelper.e(TAG, e, "could not connect media controller");
+            }
+
         }
     };
 
@@ -197,22 +222,22 @@ public class MediaNotificationManager extends BroadcastReceiver {
             return null;
         }
 
-        Notification.Builder notificationBuilder = new Notification.Builder(mService);
+        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(mService);
         int playPauseButtonPosition = 0;
 
-        if ((mPlaybackState.getActions() & PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0) {
+        if ((mPlaybackState.getActions() & PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS) != 0) {
             notificationBuilder.addAction(R.drawable.ic_skip_previous_white_24dp,
                     mService.getString(R.string.label_previous), mPreviousIntent);
             playPauseButtonPosition = 1;
         }
 
         addPlayPauseAction(notificationBuilder);
-        if ((mPlaybackState.getActions() & PlaybackState.ACTION_SKIP_TO_NEXT) != 0) {
+        if ((mPlaybackState.getActions() & PlaybackStateCompat.ACTION_SKIP_TO_NEXT) != 0) {
             notificationBuilder.addAction(R.drawable.ic_skip_next_white_24dp,
                     mService.getString(R.string.label_next), mNextIntent);
         }
 
-        MediaDescription description = mMetadata.getDescription();
+        MediaDescriptionCompat description = mMetadata.getDescription();
 
         String fetchArtUrl = null;
         Bitmap art = null;
@@ -227,18 +252,29 @@ public class MediaNotificationManager extends BroadcastReceiver {
         }
 
         notificationBuilder
-                .setStyle(new Notification.MediaStyle()
+                .setStyle(new NotificationCompat.MediaStyle()
                         .setShowActionsInCompactView(
                                 new int[]{playPauseButtonPosition})
                         .setMediaSession(mSessionToken))
                 .setColor(mNotificationColor)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setUsesChronometer(true)
-                .setContentIntent(createContentIntent())
+                .setContentIntent(createContentIntent(description))
                 .setContentTitle(description.getTitle())
                 .setContentText(description.getSubtitle())
                 .setLargeIcon(art);
+
+        if (mController != null && mController.getExtras() != null) {
+            String castName = mController.getExtras().getString(MusicService.EXTRA_CONNECTED_CAST);
+            if (castName != null) {
+                String castInfo = mService.getResources()
+                        .getString(R.string.casting_to_device, castName);
+                notificationBuilder.setSubText(castInfo);
+                notificationBuilder.addAction(R.drawable.ic_close_black_24dp,
+                        mService.getString(R.string.stop_casting), mStopCastIntent);
+            }
+        }
 
         setNotificationPlaybackState(notificationBuilder);
         if (fetchArtUrl != null) {
@@ -248,12 +284,12 @@ public class MediaNotificationManager extends BroadcastReceiver {
         return notificationBuilder.build();
     }
 
-    private void addPlayPauseAction(Notification.Builder builder) {
+    private void addPlayPauseAction(NotificationCompat.Builder builder) {
         LogHelper.d(TAG, "updatePlayPauseAction");
         String label;
         int icon;
         PendingIntent intent;
-        if (mPlaybackState.getState() == PlaybackState.STATE_PLAYING) {
+        if (mPlaybackState.getState() == PlaybackStateCompat.STATE_PLAYING) {
             label = mService.getString(R.string.label_pause);
             icon = R.drawable.ic_pause_white_24dp;
             intent = mPauseIntent;
@@ -262,17 +298,17 @@ public class MediaNotificationManager extends BroadcastReceiver {
             icon = R.drawable.ic_play_arrow_white_24dp;
             intent = mPlayIntent;
         }
-        builder.addAction(new Notification.Action(icon, label, intent));
+        builder.addAction(new NotificationCompat.Action(icon, label, intent));
     }
 
-    private void setNotificationPlaybackState(Notification.Builder builder) {
+    private void setNotificationPlaybackState(NotificationCompat.Builder builder) {
         LogHelper.d(TAG, "updateNotificationPlaybackState. mPlaybackState=" + mPlaybackState);
         if (mPlaybackState == null || !mStarted) {
             LogHelper.d(TAG, "updateNotificationPlaybackState. cancelling notification!");
             mService.stopForeground(true);
             return;
         }
-        if (mPlaybackState.getState() == PlaybackState.STATE_PLAYING
+        if (mPlaybackState.getState() == PlaybackStateCompat.STATE_PLAYING
                 && mPlaybackState.getPosition() >= 0) {
             LogHelper.d(TAG, "updateNotificationPlaybackState. updating playback position to ",
                     (System.currentTimeMillis() - mPlaybackState.getPosition()) / 1000, " seconds");
@@ -287,11 +323,11 @@ public class MediaNotificationManager extends BroadcastReceiver {
                     .setShowWhen(false)
                     .setUsesChronometer(false);
         }
-        builder.setOngoing(mPlaybackState.getState() == PlaybackState.STATE_PLAYING);
+        builder.setOngoing(mPlaybackState.getState() == PlaybackStateCompat.STATE_PLAYING);
     }
 
     private void fetchBitmapFromURLAsync(final String bitmapUrl,
-                                         final Notification.Builder builder) {
+                                         final NotificationCompat.Builder builder) {
         AlbumArtCache.getInstance().fetch(bitmapUrl, new AlbumArtCache.FetchListener() {
             @Override
             public void onFetched(String artUrl, Bitmap bitmap, Bitmap icon) {
