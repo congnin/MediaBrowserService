@@ -1,6 +1,9 @@
 package com.blablaing.mediabrowserservice.ui;
 
+import android.app.ActivityManager;
 import android.content.ComponentName;
+import android.graphics.BitmapFactory;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.support.v4.media.MediaBrowserCompat;
@@ -13,6 +16,8 @@ import android.widget.Toast;
 import com.blablaing.mediabrowserservice.MusicService;
 import com.blablaing.mediabrowserservice.R;
 import com.blablaing.mediabrowserservice.utils.LogHelper;
+import com.blablaing.mediabrowserservice.utils.NetworkHelper;
+import com.blablaing.mediabrowserservice.utils.ResourceHelper;
 
 /**
  * Created by Linh on 3/28/2017.
@@ -28,6 +33,18 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        if (Build.VERSION.SDK_INT >= 21) {
+            // Since our app icon has the same color as colorPrimary, our entry in the Recent Apps
+            // list gets weird. We need to change either the icon or the color
+            // of the TaskDescription.
+            ActivityManager.TaskDescription taskDesc = new ActivityManager.TaskDescription(
+                    getTitle().toString(),
+                    BitmapFactory.decodeResource(getResources(), R.drawable.ic_launcher_white),
+                    ResourceHelper.getThemeColor(this, R.attr.colorPrimary,
+                            android.R.color.darker_gray));
+            setTaskDescription(taskDesc);
+        }
+
         mMediaBrowser = new MediaBrowserCompat(this,
                 new ComponentName(this, MusicService.class), mConnectionCallback, null);
     }
@@ -39,16 +56,20 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
         mControlsFragment = (PlaybackControlsFragment) getFragmentManager()
                 .findFragmentById(R.id.fragment_playback_controls);
         if (mControlsFragment == null) {
-            throw new IllegalStateException("Missing fragment with id 'controls. Cannot continue.");
+            throw new IllegalStateException("Mising fragment with id 'controls'. Cannot continue.");
         }
 
         hidePlaybackControls();
+
         mMediaBrowser.connect();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        if (getSupportMediaController() != null) {
+            getSupportMediaController().unregisterCallback(mMediaControllerCallback);
+        }
         mMediaBrowser.disconnect();
     }
 
@@ -63,15 +84,39 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
 
     protected void showPlaybackControls() {
         LogHelper.d(TAG, "showPlaybackControls");
+        if (NetworkHelper.isOnline(this)) {
+            getFragmentManager().beginTransaction()
+                    .setCustomAnimations(
+                            R.animator.slide_in_from_bottom, R.animator.slide_out_to_bottom,
+                            R.animator.slide_in_from_bottom, R.animator.slide_out_to_bottom)
+                    .show(mControlsFragment)
+                    .commit();
+        }
 
     }
 
     protected void hidePlaybackControls() {
         LogHelper.d(TAG, "hidePlaybackControls");
+        getFragmentManager().beginTransaction()
+                .hide(mControlsFragment)
+                .commit();
     }
 
     protected boolean shouldShowControls() {
-        return false;
+        MediaControllerCompat mediaController = getSupportMediaController();
+        if (mediaController == null ||
+                mediaController.getMetadata() == null ||
+                mediaController.getPlaybackState() == null) {
+            return false;
+        }
+        switch (mediaController.getPlaybackState().getState()) {
+            case PlaybackStateCompat.STATE_ERROR:
+            case PlaybackStateCompat.STATE_NONE:
+            case PlaybackStateCompat.STATE_STOPPED:
+                return false;
+            default:
+                return true;
+        }
     }
 
     private void connectToSession(MediaSessionCompat.Token token) throws RemoteException {
@@ -83,6 +128,9 @@ public class BaseActivity extends ActionBarCastActivity implements MediaBrowserP
             showPlaybackControls();
         } else {
             hidePlaybackControls();
+        }
+        if (mControlsFragment != null) {
+            mControlsFragment.onConnected();
         }
         onMediaControllerConnected();
     }
